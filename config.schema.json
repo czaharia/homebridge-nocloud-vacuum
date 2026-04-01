@@ -1,0 +1,81 @@
+{
+  "pluginAlias": "NoCloudVacuumPlatform",
+  "pluginType": "platform",
+  "singular": false,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Platform Name",
+        "type": "string",
+        "default": "NoCloud Vacuum",
+        "required": true
+      },
+      "mqttUrl": {
+        "title": "MQTT Broker URL",
+        "type": "string",
+        "placeholder": "mqtt://localhost:1883",
+        "required": true,
+        "description": "URL of your MQTT broker, e.g. mqtt://192.168.1.100:1883 or mqtts://broker:8883"
+      },
+      "mqttUsername": {
+        "title": "MQTT Username",
+        "type": "string",
+        "description": "Optional. Leave blank if no authentication is required."
+      },
+      "mqttPassword": {
+        "title": "MQTT Password",
+        "type": "string",
+        "description": "Optional. Leave blank if no authentication is required."
+      },
+      "topicPrefix": {
+        "title": "MQTT Topic Prefix",
+        "type": "string",
+        "default": "NoCloud",
+        "description": "The topic prefix configured in NoCloud MQTT settings (default: NoCloud)."
+      },
+      "cleaningIterations": {
+        "title": "Cleaning Iterations",
+        "type": "integer",
+        "default": 1,
+        "minimum": 1,
+        "maximum": 3,
+        "description": "How many times each room should be cleaned per activation."
+      },
+      "customOrder": {
+        "title": "Custom Order",
+        "type": "boolean",
+        "default": false,
+        "description": "Pass customOrder=true in the cleaning payload (not supported by all firmware versions)."
+      },
+      "discoveryTimeout": {
+        "title": "Discovery Timeout (seconds)",
+        "type": "integer",
+        "default": 30,
+        "minimum": 5,
+        "maximum": 120,
+        "description": "How long to wait for retained MQTT messages before giving up on discovering new robots."
+      }
+    },
+    "required": ["mqttUrl"]
+  },
+  "layout": [
+    { "key": "name" },
+    { "key": "mqttUrl" },
+    { "key": "mqttUsername" },
+    { "key": "mqttPassword" },
+    { "key": "topicPrefix" },
+    {
+      "type": "fieldset",
+      "title": "Cleaning Options",
+      "expandable": true,
+      "items": ["cleaningIterations", "customOrder"]
+    },
+    {
+      "type": "fieldset",
+      "title": "Advanced",
+      "expandable": true,
+      "items": ["discoveryTimeout"]
+    }
+  ]
+}

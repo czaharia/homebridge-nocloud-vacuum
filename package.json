@@ -1,0 +1,38 @@
+{
+  "name": "homebridge-nocloud-vacuum",
+  "version": "1.0.2",
+  "description": "Homebridge plugin for Dreame robots running NoCloud (Valetudo) firmware — auto-discovers robots via MQTT and exposes per-room fans",
+  "main": "index.js",
+  "keywords": [
+    "homebridge-plugin",
+    "homebridge",
+    "nocloud",
+    "valetudo",
+    "dreame",
+    "vacuum",
+    "robot",
+    "mqtt"
+  ],
+  "engines": {
+    "node": ">=18.0.0",
+    "homebridge": ">=1.6.0"
+  },
+  "scripts": {
+    "lint": "eslint src/ index.js"
+  },
+  "dependencies": {
+    "mqtt": "^5.3.4"
+  },
+  "devDependencies": {
+    "homebridge": "^1.8.0"
+  },
+  "peerDependencies": {
+    "homebridge": ">=1.6.0"
+  },
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  }
+}
