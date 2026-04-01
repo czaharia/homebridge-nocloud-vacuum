@@ -37,16 +37,9 @@ class NoCloudVacuumPlatform {
     this.log    = log;
     this.config = config || {};
     this.api    = api;
-
-    // uuid → PlatformAccessory (restored from Homebridge cache on startup)
     this.cachedAccessories = new Map();
-
-    // deviceId → RobotState (see _newRobotState)
     this.robots = new Map();
-
     this.mqttClient = null;
-
-    // Holds segments that arrived before the robot's $name was received
     this._pendingSegments = new Map(); // deviceId → parsed segments object
 
     if (!this.config.mqttUrl) {
@@ -58,14 +51,10 @@ class NoCloudVacuumPlatform {
     this.api.on('shutdown',           () => { if (this.mqttClient) this.mqttClient.end(true); });
   }
 
-  // ─── Homebridge cache restore ──────────────────────────────────────────────
-
   configureAccessory(accessory) {
     this.log.debug(`[NoCloud] Cache restore: ${accessory.displayName}`);
     this.cachedAccessories.set(accessory.UUID, accessory);
   }
-
-  // ─── MQTT connection ───────────────────────────────────────────────────────
 
   connectMqtt() {
     const url  = this.config.mqttUrl;
@@ -80,13 +69,10 @@ class NoCloudVacuumPlatform {
       this.log.info('[NoCloud] MQTT connected — subscribing to discovery topics');
       const p = this.prefix;
 
-      // Retained topics — delivered immediately on (re)connect
       this.mqttClient.subscribe(`${p}/+/$name`,                        { qos: 0 });
       this.mqttClient.subscribe(`${p}/+/MapData/segments`,             { qos: 0 });
       this.mqttClient.subscribe(`${p}/+/StatusStateAttribute/status`,  { qos: 0 });
       this.mqttClient.subscribe(`${p}/+/StatusStateAttribute/flag`,    { qos: 0 });
-      // NOTE: do NOT subscribe to MapSegmentationCapability/clean —
-      //       it has no getter in NoCloud; the topic is write-only.
     });
 
     this.mqttClient.on('message', (topic, buf) => {
@@ -101,8 +87,6 @@ class NoCloudVacuumPlatform {
   get prefix() {
     return (this.config.topicPrefix || 'NoCloud').replace(/\/$/, '');
   }
-
-  // ─── Message routing ───────────────────────────────────────────────────────
 
   _handleMessage(topic, payload) {
     const p     = this.prefix;
@@ -129,8 +113,6 @@ class NoCloudVacuumPlatform {
     }
   }
 
-  // ─── Discovery ─────────────────────────────────────────────────────────────
-
   _onRobotName(deviceId, name) {
     if (!name) return;
 
@@ -138,7 +120,6 @@ class NoCloudVacuumPlatform {
       this.log.info(`[NoCloud] Discovered robot "${name}" [${deviceId}]`);
       this.robots.set(deviceId, this._newRobotState(name));
 
-      // Flush any segments that arrived before the name
       if (this._pendingSegments.has(deviceId)) {
         const segs = this._pendingSegments.get(deviceId);
         this._pendingSegments.delete(deviceId);
@@ -162,15 +143,12 @@ class NoCloudVacuumPlatform {
       return;
     }
 
-    // IMPORTANT: NoCloud publishes {} when the map is not yet loaded.
-    // Ignore empty maps to avoid removing valid cached accessories on boot.
     if (typeof segments !== 'object' || segments === null || Object.keys(segments).length === 0) {
       this.log.debug(`[NoCloud] Ignoring empty segment map for ${deviceId} (map not yet loaded)`);
       return;
     }
 
     if (!this.robots.has(deviceId)) {
-      // Robot name not received yet — queue and wait
       this.log.debug(`[NoCloud] Segments arrived before $name for ${deviceId}, queuing`);
       this._pendingSegments.set(deviceId, segments);
       return;
@@ -178,8 +156,6 @@ class NoCloudVacuumPlatform {
 
     this._syncAccessories(deviceId, segments);
   }
-
-  // ─── Status tracking ───────────────────────────────────────────────────────
 
   _onStatus(deviceId, status) {
     const robot = this.robots.get(deviceId);
@@ -190,7 +166,6 @@ class NoCloudVacuumPlatform {
 
     if (prev !== status) this.log.debug(`[NoCloud] ${deviceId} status: ${prev} → ${status}`);
 
-    // When robot leaves an active cleaning state, clear the tracked segment
     if (!['cleaning', 'paused'].includes(status)) {
       robot.activeSegment = null;
     }
@@ -207,7 +182,6 @@ class NoCloudVacuumPlatform {
 
     if (prev !== flag) this.log.debug(`[NoCloud] ${deviceId} flag: ${prev} → ${flag}`);
 
-    // If no longer a segment operation, clear the active segment
     if (flag !== 'segment') {
       robot.activeSegment = null;
     }
@@ -215,12 +189,6 @@ class NoCloudVacuumPlatform {
     this._updateSwitchStates(deviceId);
   }
 
-  /**
-   * Pushes the correct On/Off state to every room switch for a robot.
-   *
-   * A switch is ON when the robot is cleaning (or paused mid-clean) that specific segment.
-   * Showing ON when paused lets the user cancel a paused job by tapping OFF.
-   */
   _updateSwitchStates(deviceId) {
     const robot = this.robots.get(deviceId);
     if (!robot) return;
@@ -232,28 +200,22 @@ class NoCloudVacuumPlatform {
     }
   }
 
-  // ─── Accessory lifecycle ───────────────────────────────────────────────────
-
   _syncAccessories(deviceId, segments) {
     const robot = this.robots.get(deviceId);
     if (!robot) return;
 
-    // Only named segments are "known" — unnamed ones should be treated as non-existent
     const knownSegIds = new Set(
       Object.entries(segments)
         .filter(([id, name]) => String(name) !== String(id))
         .map(([id]) => id)
     );
 
-    // Add new / adopt cached accessories
     for (const [segId, segName] of Object.entries(segments)) {
-      // Skip segments with no custom name — NoCloud publishes id as name when unnamed
       if (String(segName) === String(segId)) {
         this.log.debug(`[NoCloud] Skipping unnamed segment ${segId} on ${deviceId}`);
         continue;
       }
       if (robot.roomAccessories.has(segId)) {
-        // Already set up — just keep the name fresh
         robot.roomAccessories.get(segId).updateDisplayName(`${robot.name} – ${segName}`);
         continue;
       }
@@ -265,7 +227,7 @@ class NoCloudVacuumPlatform {
       if (this.cachedAccessories.has(uuid)) {
         platformAcc = this.cachedAccessories.get(uuid);
         platformAcc.context = { deviceId, segId, segmentName: segName, robotName: robot.name };
-        this.cachedAccessories.delete(uuid); // mark adopted
+        this.cachedAccessories.delete(uuid);
         this.log.info(`[NoCloud] Adopted cached accessory: ${displayName}`);
       } else {
         platformAcc = new this.api.platformAccessory(displayName, uuid);
@@ -277,7 +239,6 @@ class NoCloudVacuumPlatform {
       robot.roomAccessories.set(segId, new RoomAccessory(this, platformAcc));
     }
 
-    // Remove stale accessories for segments that no longer exist in the map
     for (const [segId, roomAcc] of robot.roomAccessories) {
       if (!knownSegIds.has(segId)) {
         this.log.info(`[NoCloud] Removing stale accessory: ${roomAcc.accessory.displayName}`);
@@ -286,7 +247,6 @@ class NoCloudVacuumPlatform {
       }
     }
 
-    // Also prune orphaned cached accessories belonging to this robot
     for (const [uuid, acc] of this.cachedAccessories) {
       if (acc.context && acc.context.deviceId === deviceId && !knownSegIds.has(acc.context.segId)) {
         this.log.info(`[NoCloud] Removing orphaned cached accessory: ${acc.displayName}`);
@@ -296,15 +256,6 @@ class NoCloudVacuumPlatform {
     }
   }
 
-  // ─── MQTT command helpers ──────────────────────────────────────────────────
-
-  /**
-   * Sends a segment cleaning command.
-   * Payload format confirmed from NoCloud source:
-   *   segment_ids: array of strings (firmware coerces with `${id}`)
-   *   iterations:  number (optional, default 1)
-   *   customOrder: boolean (optional, not supported by all firmware)
-   */
   async startSegmentCleaning(deviceId, segId) {
     if (!this._assertConnected()) throw new Error('MQTT not connected');
 
@@ -323,11 +274,6 @@ class NoCloudVacuumPlatform {
     this.log.info(`[NoCloud] ▶ Cleaning segment "${segId}" on ${deviceId}`);
   }
 
-  /**
-   * Sends the HOME command.
-   * BasicControlCapability/operation/set accepts a plain uppercase string — NOT JSON.
-   * Confirmed from Commands.js: BASIC_CONTROL.HOME = "HOME"
-   */
   async returnHome(deviceId) {
     if (!this._assertConnected()) throw new Error('MQTT not connected');
 
@@ -337,10 +283,8 @@ class NoCloudVacuumPlatform {
     const robot = this.robots.get(deviceId);
     if (robot) robot.activeSegment = null;
 
-    this.log.info(`[NoCloud] 🏠 HOME sent to ${deviceId}`);
+    this.log.info(`[NoCloud] HOME sent to ${deviceId}`);
   }
-
-  // ─── Internal helpers ──────────────────────────────────────────────────────
 
   _assertConnected() {
     if (this.mqttClient?.connected) return true;
@@ -360,10 +304,10 @@ class NoCloudVacuumPlatform {
   _newRobotState(name) {
     return {
       name,
-      status:         'idle',     // latest StatusStateAttribute/status value
-      flag:           'none',     // latest StatusStateAttribute/flag value
-      activeSegment:  null,       // segId string we last commanded (optimistic tracking)
-      roomAccessories: new Map(), // segId → RoomAccessory
+      status:         'idle',
+      flag:           'none',
+      activeSegment:  null,
+      roomAccessories: new Map(),
     };
   }
 }
