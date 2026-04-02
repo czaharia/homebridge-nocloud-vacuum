@@ -35,15 +35,15 @@ class RoomAccessory {
   }
 
   _setupSwitchService() {
-    this.switchService = this.accessory.getService(this.hap.Service.Fan)
-                      || this.accessory.addService(this.hap.Service.Fan, this.segmentName);
+    this.switchService = this.accessory.getService(this.hap.Service.Fanv2)
+                      || this.accessory.addService(this.hap.Service.Fanv2, this.segmentName);
 
     this.switchService.setCharacteristic(this.hap.Characteristic.Name, this.segmentName);
 
     this.switchService
-      .getCharacteristic(this.hap.Characteristic.On)
-      .onGet(this._handleGet.bind(this))
-      .onSet(this._handleSet.bind(this));
+      .getCharacteristic(this.hap.Characteristic.Active)  // Fanv2 uses Active, not On
+      .onGet(() => this._handleGet() ? this.hap.Characteristic.Active.ACTIVE : this.hap.Characteristic.Active.INACTIVE)
+      .onSet(async (value) => this._handleSet(value === this.hap.Characteristic.Active.ACTIVE));
   }
 
   _handleGet() {
@@ -78,7 +78,9 @@ class RoomAccessory {
   }
 
   updateState(isActive) {
-    this.switchService.updateCharacteristic(this.hap.Characteristic.On, isActive);
+    this.switchService.updateCharacteristic(
+      this.hap.Characteristic.Active,isActive ? this.hap.Characteristic.Active.ACTIVE : this.hap.Characteristic.Active.INACTIVE
+    );
   }
 }
 
