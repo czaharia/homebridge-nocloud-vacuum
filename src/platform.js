@@ -31,6 +31,22 @@ const { RoomAccessory } = require('./roomAccessory');
 const PLUGIN_NAME   = 'homebridge-nocloud-vacuum';
 const PLATFORM_NAME = 'NoCloudVacuumPlatform';
 
+// HomeKit (HAP) rejects en/em dashes and other exotic symbols in names.
+// Normalise to plain ASCII hyphen and make sure it starts/ends with a letter or number.
+function sanitizeName(str) {
+  return String(str)
+    .replace(/[\u2010-\u2015\u2212]/g, '-')       // ‐ ‑ ‒ – — ― − → -
+    .replace(/[\u2018\u2019]/g, "'")               // curly apostrophes → '
+    .replace(/[^\p{L}\p{N} '.,\-_&()]/gu, '')      // drop unsupported symbols/emoji
+    .replace(/\s+/g, ' ')
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '') // trim non letter/number edges
+    || 'Room';
+}
+
+function roomDisplayName(robotName, segName) {
+  return sanitizeName(`${robotName} - ${segName}`);
+}
+
 class NoCloudVacuumPlatform {
 
   constructor(log, config, api) {
@@ -216,18 +232,19 @@ class NoCloudVacuumPlatform {
         continue;
       }
       if (robot.roomAccessories.has(segId)) {
-        robot.roomAccessories.get(segId).updateDisplayName(`${robot.name} – ${segName}`);
+        robot.roomAccessories.get(segId).updateDisplayName(roomDisplayName(robot.name, segName));
         continue;
       }
 
       const uuid        = this.api.hap.uuid.generate(`${PLUGIN_NAME}::${deviceId}::${segId}`);
-      const displayName = `${robot.name} – ${segName}`;
+      const displayName = roomDisplayName(robot.name, segName);
       let platformAcc;
 
       if (this.cachedAccessories.has(uuid)) {
         platformAcc = this.cachedAccessories.get(uuid);
         platformAcc.context = { deviceId, segId, segmentName: segName, robotName: robot.name };
         this.cachedAccessories.delete(uuid);
+        platformAcc.displayName = displayName; // refresh stale cached name (e.g. old en-dash)
         this.log.info(`[NoCloud] Adopted cached accessory: ${displayName}`);
       } else {
         platformAcc = new this.api.platformAccessory(displayName, uuid);

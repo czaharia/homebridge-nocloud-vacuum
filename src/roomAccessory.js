@@ -29,7 +29,7 @@ class RoomAccessory {
 
     svc
       .setCharacteristic(this.hap.Characteristic.Manufacturer,    'Dreame / NoCloud')
-      .setCharacteristic(this.hap.Characteristic.Model,           'Robot Vacuum — Room Switch')
+      .setCharacteristic(this.hap.Characteristic.Model,           'Robot Vacuum - Room Switch')
       .setCharacteristic(this.hap.Characteristic.SerialNumber,    `${this.deviceId}-seg${this.segId}`)
       .setCharacteristic(this.hap.Characteristic.FirmwareRevision, '1.0.0');
   }
